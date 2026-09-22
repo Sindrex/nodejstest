@@ -18,45 +18,36 @@ const createHttpError = (statusCode, message) => {
   return error;
 };
 
-const readJsonBody = (request) =>
-  new Promise((resolve, reject) => {
-    let body = '';
-    let tooLarge = false;
+const readJsonBody = async (request) => {
+  const contentLength = Number(request.headers['content-length']);
 
-    const onData = (chunk) => {
-      if (tooLarge) {
-        return;
-      }
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_SIZE) {
+    throw createHttpError(413, 'Request body too large');
+  }
 
-      body += chunk;
+  const chunks = [];
+  let bodySize = 0;
 
-      if (body.length > MAX_BODY_SIZE) {
-        tooLarge = true;
-      }
-    };
+  for await (const chunk of request) {
+    bodySize += chunk.length;
 
-    const onEnd = () => {
-      if (tooLarge) {
-        reject(createHttpError(413, 'Request body too large'));
-        return;
-      }
+    if (bodySize > MAX_BODY_SIZE) {
+      throw createHttpError(413, 'Request body too large');
+    }
 
-      if (!body) {
-        resolve({});
-        return;
-      }
+    chunks.push(chunk);
+  }
 
-      try {
-        resolve(JSON.parse(body));
-      } catch (error) {
-        reject(createHttpError(400, 'Invalid JSON body'));
-      }
-    };
+  if (chunks.length === 0) {
+    return {};
+  }
 
-    request.on('data', onData);
-    request.on('end', onEnd);
-    request.on('error', reject);
-  });
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  } catch (error) {
+    throw createHttpError(400, 'Invalid JSON body');
+  }
+};
 
 const findItemById = (id) => items.find((item) => item.id === id);
 const getValidatedName = (payload) => {

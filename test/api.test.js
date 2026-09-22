@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const http = require('node:http');
 const { createServer, resetItems } = require('../app');
 
 const startServer = () =>
@@ -18,6 +19,37 @@ const stopServer = (server) =>
 
       resolve();
     });
+  });
+
+const sendRequest = ({ port, path, method, headers = {}, body = '' }) =>
+  new Promise((resolve, reject) => {
+    const request = http.request(
+      {
+        host: '127.0.0.1',
+        port,
+        path,
+        method,
+        headers,
+      },
+      (response) => {
+        let responseBody = '';
+
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => {
+          responseBody += chunk;
+        });
+        response.on('end', () => {
+          resolve({
+            statusCode: response.statusCode,
+            headers: response.headers,
+            body: JSON.parse(responseBody),
+          });
+        });
+      }
+    );
+
+    request.on('error', reject);
+    request.end(body);
   });
 
 test.beforeEach(() => {
@@ -54,6 +86,12 @@ test('CRUD operations work for /api/items', async () => {
 
     assert.equal(createResponse.status, 201);
     assert.deepEqual(created, { item: { id: 1, name: 'First item' } });
+
+    const getResponse = await fetch(`${baseUrl}/1`);
+    const fetched = await getResponse.json();
+
+    assert.equal(getResponse.status, 200);
+    assert.deepEqual(fetched, { item: { id: 1, name: 'First item' } });
 
     const listResponse = await fetch(baseUrl);
     const listed = await listResponse.json();
@@ -129,25 +167,16 @@ test('invalid payloads return validation errors', async () => {
     assert.equal(blankUpdateResponse.status, 400);
     assert.deepEqual(blankUpdate, { error: 'Item name is required' });
 
-    const invalidJsonResponse = await fetch(baseUrl, {
+    const invalidJsonResponse = await sendRequest({
+      port: address.port,
+      path: '/api/items',
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{"name":',
     });
-    const invalidJson = await invalidJsonResponse.json();
 
-    assert.equal(invalidJsonResponse.status, 400);
-    assert.deepEqual(invalidJson, { error: 'Invalid JSON body' });
-
-    const largePayloadResponse = await fetch(baseUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'a'.repeat(1024 * 1024 + 1) }),
-    });
-    const largePayload = await largePayloadResponse.json();
-
-    assert.equal(largePayloadResponse.status, 413);
-    assert.deepEqual(largePayload, { error: 'Request body too large' });
+    assert.equal(invalidJsonResponse.statusCode, 400);
+    assert.deepEqual(invalidJsonResponse.body, { error: 'Invalid JSON body' });
   } finally {
     await stopServer(server);
   }
@@ -178,6 +207,29 @@ test('unsupported methods return 405 for known routes', async () => {
     assert.equal(itemResponse.status, 405);
     assert.equal(itemResponse.headers.get('allow'), 'GET, PUT, DELETE');
     assert.deepEqual(itemBody, { error: 'Method not allowed' });
+  } finally {
+    await stopServer(server);
+  }
+});
+
+test('large request bodies return 413', async () => {
+  const server = await startServer();
+  const address = server.address();
+
+  try {
+    const result = await sendRequest({
+      port: address.port,
+      path: '/api/items',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': 1024 * 1024 + 1,
+      },
+      body: '{}',
+    });
+
+    assert.equal(result.statusCode, 413);
+    assert.deepEqual(result.body, { error: 'Request body too large' });
   } finally {
     await stopServer(server);
   }
