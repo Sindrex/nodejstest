@@ -217,6 +217,16 @@ test('unsupported methods return 405 for known routes', async () => {
     assert.equal(itemResponse.status, 405);
     assert.equal(itemResponse.headers.get('allow'), 'GET, PUT, DELETE');
     assert.deepEqual(itemBody, { error: 'Method not allowed' });
+
+    const starResponse = await sendRequest({
+      port: address.port,
+      path: '*',
+      method: 'OPTIONS',
+    });
+
+    assert.equal(starResponse.statusCode, 405);
+    assert.equal(starResponse.headers.allow, 'GET');
+    assert.deepEqual(starResponse.body, { error: 'Method not allowed' });
   } finally {
     await stopServer(server);
   }

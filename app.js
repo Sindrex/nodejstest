@@ -177,7 +177,12 @@ const handleItemsRoute = async (request, response, pathname) => {
 const requestListener = async (request, response) => {
   try {
     if (request.url === '*') {
-      sendJson(response, 404, { error: 'Route not found' });
+      sendJson(
+        response,
+        405,
+        { error: 'Method not allowed' },
+        { Allow: 'GET' }
+      );
       return;
     }
 
