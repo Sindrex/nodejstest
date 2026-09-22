@@ -103,6 +103,32 @@ test('invalid payloads return validation errors', async () => {
     assert.equal(missingNameResponse.status, 400);
     assert.deepEqual(missingName, { error: 'Item name is required' });
 
+    const blankNameResponse = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '   ' }),
+    });
+    const blankName = await blankNameResponse.json();
+
+    assert.equal(blankNameResponse.status, 400);
+    assert.deepEqual(blankName, { error: 'Item name is required' });
+
+    await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Existing item' }),
+    });
+
+    const blankUpdateResponse = await fetch(`${baseUrl}/1`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '   ' }),
+    });
+    const blankUpdate = await blankUpdateResponse.json();
+
+    assert.equal(blankUpdateResponse.status, 400);
+    assert.deepEqual(blankUpdate, { error: 'Item name is required' });
+
     const invalidJsonResponse = await fetch(baseUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

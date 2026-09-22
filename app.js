@@ -33,6 +33,14 @@ const readJsonBody = (request) =>
   });
 
 const findItemById = (id) => items.find((item) => item.id === id);
+const getValidatedName = (payload) => {
+  if (typeof payload.name !== 'string') {
+    return null;
+  }
+
+  const name = payload.name.trim();
+  return name ? name : null;
+};
 
 const handleItemsRoute = async (request, response, pathname) => {
   const idMatch = pathname.match(/^\/api\/items\/(\d+)$/);
@@ -46,13 +54,14 @@ const handleItemsRoute = async (request, response, pathname) => {
     if (request.method === 'POST') {
       try {
         const payload = await readJsonBody(request);
+        const name = getValidatedName(payload);
 
-        if (!payload.name || typeof payload.name !== 'string') {
+        if (!name) {
           sendJson(response, 400, { error: 'Item name is required' });
           return;
         }
 
-        const item = { id: nextId++, name: payload.name };
+        const item = { id: nextId++, name };
         items.push(item);
         sendJson(response, 201, { item });
       } catch (error) {
@@ -80,13 +89,14 @@ const handleItemsRoute = async (request, response, pathname) => {
     if (request.method === 'PUT') {
       try {
         const payload = await readJsonBody(request);
+        const name = getValidatedName(payload);
 
-        if (!payload.name || typeof payload.name !== 'string') {
+        if (!name) {
           sendJson(response, 400, { error: 'Item name is required' });
           return;
         }
 
-        item.name = payload.name;
+        item.name = name;
         sendJson(response, 200, { item });
       } catch (error) {
         sendJson(response, 400, { error: error.message });
