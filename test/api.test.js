@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { createServer, resetItems } = require('../app');
+const { MAX_BODY_SIZE, createServer, resetItems } = require('../app');
 
 const startServer = () =>
   new Promise((resolve) => {
@@ -226,6 +226,51 @@ test('large request bodies return 413', async () => {
         'Content-Length': 1024 * 1024 + 1,
       },
       body: '{}',
+    });
+
+    assert.equal(result.statusCode, 413);
+    assert.deepEqual(result.body, { error: 'Request body too large' });
+  } finally {
+    await stopServer(server);
+  }
+});
+
+test('streamed request bodies over the limit return 413', async () => {
+  const server = await startServer();
+  const address = server.address();
+
+  try {
+    const result = await new Promise((resolve, reject) => {
+      const request = http.request(
+        {
+          host: '127.0.0.1',
+          port: address.port,
+          path: '/api/items',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+        (response) => {
+          let responseBody = '';
+
+          response.setEncoding('utf8');
+          response.on('data', (chunk) => {
+            responseBody += chunk;
+          });
+          response.on('end', () => {
+            resolve({
+              statusCode: response.statusCode,
+              body: JSON.parse(responseBody),
+            });
+          });
+        }
+      );
+
+      request.on('error', reject);
+      request.write('{"name":"');
+      request.write('a'.repeat(MAX_BODY_SIZE));
+      request.end('"}');
     });
 
     assert.equal(result.statusCode, 413);

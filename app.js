@@ -60,6 +60,17 @@ const getValidatedName = (payload) => {
 };
 const sendError = (response, error) => {
   if (error.statusCode) {
+    if (error.statusCode === 413) {
+      response.shouldKeepAlive = false;
+      sendJson(
+        response,
+        error.statusCode,
+        { error: error.message },
+        { Connection: 'close' }
+      );
+      return;
+    }
+
     sendJson(response, error.statusCode, { error: error.message });
     return;
   }
@@ -195,6 +206,7 @@ const resetItems = () => {
 };
 
 module.exports = {
+  MAX_BODY_SIZE,
   createServer,
   resetItems,
 };
