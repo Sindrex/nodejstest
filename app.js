@@ -1,22 +1,46 @@
 const http = require('http');
 
 const items = [];
+const MAX_BODY_SIZE = 1024 * 1024;
 let nextId = 1;
 
-const sendJson = (response, statusCode, payload) => {
-  response.writeHead(statusCode, { 'Content-Type': 'application/json' });
+const sendJson = (response, statusCode, payload, headers = {}) => {
+  response.writeHead(statusCode, {
+    'Content-Type': 'application/json',
+    ...headers,
+  });
   response.end(JSON.stringify(payload));
+};
+
+const createHttpError = (statusCode, message) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
 };
 
 const readJsonBody = (request) =>
   new Promise((resolve, reject) => {
     let body = '';
+    let tooLarge = false;
 
-    request.on('data', (chunk) => {
+    const onData = (chunk) => {
+      if (tooLarge) {
+        return;
+      }
+
       body += chunk;
-    });
 
-    request.on('end', () => {
+      if (body.length > MAX_BODY_SIZE) {
+        tooLarge = true;
+      }
+    };
+
+    const onEnd = () => {
+      if (tooLarge) {
+        reject(createHttpError(413, 'Request body too large'));
+        return;
+      }
+
       if (!body) {
         resolve({});
         return;
@@ -25,10 +49,12 @@ const readJsonBody = (request) =>
       try {
         resolve(JSON.parse(body));
       } catch (error) {
-        reject(new Error('Invalid JSON body'));
+        reject(createHttpError(400, 'Invalid JSON body'));
       }
-    });
+    };
 
+    request.on('data', onData);
+    request.on('end', onEnd);
     request.on('error', reject);
   });
 
@@ -40,6 +66,14 @@ const getValidatedName = (payload) => {
 
   const name = payload.name.trim();
   return name ? name : null;
+};
+const sendError = (response, error) => {
+  if (error.statusCode) {
+    sendJson(response, error.statusCode, { error: error.message });
+    return;
+  }
+
+  sendJson(response, 500, { error: 'Internal server error' });
 };
 
 const handleItemsRoute = async (request, response, pathname) => {
@@ -57,7 +91,7 @@ const handleItemsRoute = async (request, response, pathname) => {
         const name = getValidatedName(payload);
 
         if (!name) {
-          sendJson(response, 400, { error: 'Item name is required' });
+          sendError(response, createHttpError(400, 'Item name is required'));
           return;
         }
 
@@ -65,11 +99,19 @@ const handleItemsRoute = async (request, response, pathname) => {
         items.push(item);
         sendJson(response, 201, { item });
       } catch (error) {
-        sendJson(response, 400, { error: error.message });
+        sendError(response, error);
       }
 
       return;
     }
+
+    sendJson(
+      response,
+      405,
+      { error: 'Method not allowed' },
+      { Allow: 'GET, POST' }
+    );
+    return;
   }
 
   if (idMatch) {
@@ -92,14 +134,14 @@ const handleItemsRoute = async (request, response, pathname) => {
         const name = getValidatedName(payload);
 
         if (!name) {
-          sendJson(response, 400, { error: 'Item name is required' });
+          sendError(response, createHttpError(400, 'Item name is required'));
           return;
         }
 
         item.name = name;
         sendJson(response, 200, { item });
       } catch (error) {
-        sendJson(response, 400, { error: error.message });
+        sendError(response, error);
       }
 
       return;
@@ -111,6 +153,14 @@ const handleItemsRoute = async (request, response, pathname) => {
       sendJson(response, 200, { message: 'Item deleted' });
       return;
     }
+
+    sendJson(
+      response,
+      405,
+      { error: 'Method not allowed' },
+      { Allow: 'GET, PUT, DELETE' }
+    );
+    return;
   }
 
   sendJson(response, 404, { error: 'Route not found' });
@@ -125,6 +175,16 @@ const requestListener = async (request, response) => {
       return;
     }
 
+    if (pathname === '/health') {
+      sendJson(
+        response,
+        405,
+        { error: 'Method not allowed' },
+        { Allow: 'GET' }
+      );
+      return;
+    }
+
     if (pathname === '/api/items' || /^\/api\/items\/\d+$/.test(pathname)) {
       await handleItemsRoute(request, response, pathname);
       return;
@@ -132,7 +192,7 @@ const requestListener = async (request, response) => {
 
     sendJson(response, 404, { error: 'Route not found' });
   } catch (error) {
-    sendJson(response, 500, { error: 'Internal server error' });
+    sendError(response, error);
   }
 };
 

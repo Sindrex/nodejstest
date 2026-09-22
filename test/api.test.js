@@ -138,6 +138,46 @@ test('invalid payloads return validation errors', async () => {
 
     assert.equal(invalidJsonResponse.status, 400);
     assert.deepEqual(invalidJson, { error: 'Invalid JSON body' });
+
+    const largePayloadResponse = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'a'.repeat(1024 * 1024 + 1) }),
+    });
+    const largePayload = await largePayloadResponse.json();
+
+    assert.equal(largePayloadResponse.status, 413);
+    assert.deepEqual(largePayload, { error: 'Request body too large' });
+  } finally {
+    await stopServer(server);
+  }
+});
+
+test('unsupported methods return 405 for known routes', async () => {
+  const server = await startServer();
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const healthResponse = await fetch(`${baseUrl}/health`, { method: 'POST' });
+    const healthBody = await healthResponse.json();
+
+    assert.equal(healthResponse.status, 405);
+    assert.equal(healthResponse.headers.get('allow'), 'GET');
+    assert.deepEqual(healthBody, { error: 'Method not allowed' });
+
+    await fetch(`${baseUrl}/api/items`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Existing item' }),
+    });
+
+    const itemResponse = await fetch(`${baseUrl}/api/items/1`, { method: 'PATCH' });
+    const itemBody = await itemResponse.json();
+
+    assert.equal(itemResponse.status, 405);
+    assert.equal(itemResponse.headers.get('allow'), 'GET, PUT, DELETE');
+    assert.deepEqual(itemBody, { error: 'Method not allowed' });
   } finally {
     await stopServer(server);
   }
