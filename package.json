@@ -1,0 +1,21 @@
+{
+  "name": "nodejstest",
+  "version": "1.0.0",
+  "description": "Basic Node.js REST API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sindrex/nodejstest.git"
+  },
+  "keywords": [
+    "node",
+    "rest",
+    "api"
+  ],
+  "author": "",
+  "license": "ISC"
+}
