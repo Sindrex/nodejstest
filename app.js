@@ -107,19 +107,23 @@ const handleItemsRoute = async (request, response, pathname) => {
 };
 
 const requestListener = async (request, response) => {
-  const { pathname } = new URL(request.url, 'http://localhost');
+  try {
+    const { pathname } = new URL(request.url, 'http://localhost');
 
-  if (pathname === '/health' && request.method === 'GET') {
-    sendJson(response, 200, { status: 'ok' });
-    return;
+    if (pathname === '/health' && request.method === 'GET') {
+      sendJson(response, 200, { status: 'ok' });
+      return;
+    }
+
+    if (pathname === '/api/items' || /^\/api\/items\/\d+$/.test(pathname)) {
+      await handleItemsRoute(request, response, pathname);
+      return;
+    }
+
+    sendJson(response, 404, { error: 'Route not found' });
+  } catch (error) {
+    sendJson(response, 500, { error: 'Internal server error' });
   }
-
-  if (pathname === '/api/items' || /^\/api\/items\/\d+$/.test(pathname)) {
-    await handleItemsRoute(request, response, pathname);
-    return;
-  }
-
-  sendJson(response, 404, { error: 'Route not found' });
 };
 
 const createServer = () => http.createServer(requestListener);

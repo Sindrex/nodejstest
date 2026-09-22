@@ -76,6 +76,42 @@ test('CRUD operations work for /api/items', async () => {
 
     assert.equal(deleteResponse.status, 200);
     assert.deepEqual(deleted, { message: 'Item deleted' });
+
+    const missingResponse = await fetch(`${baseUrl}/1`);
+    const missing = await missingResponse.json();
+
+    assert.equal(missingResponse.status, 404);
+    assert.deepEqual(missing, { error: 'Item not found' });
+  } finally {
+    await stopServer(server);
+  }
+});
+
+test('invalid payloads return validation errors', async () => {
+  const server = await startServer();
+  const address = server.address();
+  const baseUrl = `http://127.0.0.1:${address.port}/api/items`;
+
+  try {
+    const missingNameResponse = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const missingName = await missingNameResponse.json();
+
+    assert.equal(missingNameResponse.status, 400);
+    assert.deepEqual(missingName, { error: 'Item name is required' });
+
+    const invalidJsonResponse = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"name":',
+    });
+    const invalidJson = await invalidJsonResponse.json();
+
+    assert.equal(invalidJsonResponse.status, 400);
+    assert.deepEqual(invalidJson, { error: 'Invalid JSON body' });
   } finally {
     await stopServer(server);
   }
