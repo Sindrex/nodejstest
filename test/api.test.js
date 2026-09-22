@@ -167,6 +167,16 @@ test('invalid payloads return validation errors', async () => {
     assert.equal(blankUpdateResponse.status, 400);
     assert.deepEqual(blankUpdate, { error: 'Item name is required' });
 
+    const wrongTypeResponse = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'name=wrong',
+    });
+    const wrongType = await wrongTypeResponse.json();
+
+    assert.equal(wrongTypeResponse.status, 415);
+    assert.deepEqual(wrongType, { error: 'Content-Type must be application/json' });
+
     const invalidJsonResponse = await sendRequest({
       port: address.port,
       path: '/api/items',
@@ -230,6 +240,26 @@ test('large request bodies return 413', async () => {
 
     assert.equal(result.statusCode, 413);
     assert.deepEqual(result.body, { error: 'Request body too large' });
+
+    await fetch(`http://127.0.0.1:${address.port}/api/items`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Existing item' }),
+    });
+
+    const updateResult = await sendRequest({
+      port: address.port,
+      path: '/api/items/1',
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': 1024 * 1024 + 1,
+      },
+      body: '{}',
+    });
+
+    assert.equal(updateResult.statusCode, 413);
+    assert.deepEqual(updateResult.body, { error: 'Request body too large' });
   } finally {
     await stopServer(server);
   }

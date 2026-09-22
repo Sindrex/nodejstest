@@ -19,6 +19,12 @@ const createHttpError = (statusCode, message) => {
 };
 
 const readJsonBody = async (request) => {
+  const contentType = request.headers['content-type'];
+
+  if (!contentType || !contentType.startsWith('application/json')) {
+    throw createHttpError(415, 'Content-Type must be application/json');
+  }
+
   const contentLength = Number(request.headers['content-length']);
 
   if (Number.isFinite(contentLength) && contentLength > MAX_BODY_SIZE) {
@@ -170,6 +176,11 @@ const handleItemsRoute = async (request, response, pathname) => {
 
 const requestListener = async (request, response) => {
   try {
+    if (request.url === '*') {
+      sendJson(response, 404, { error: 'Route not found' });
+      return;
+    }
+
     const { pathname } = new URL(request.url, 'http://localhost');
 
     if (pathname === '/health' && request.method === 'GET') {
